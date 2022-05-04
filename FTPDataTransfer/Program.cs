@@ -72,7 +72,7 @@ namespace FTPDataTransfer
                                      | NotifyFilters.DirectoryName;
 
                 // Only watch text files.
-                watcher.Filter = "*.xml";
+                watcher.Filter = "*.xml"; // * to filter all formats
 
                 // Add event handlers.
                 watcher.Changed += OnChanged;
