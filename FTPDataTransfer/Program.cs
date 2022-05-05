@@ -10,8 +10,10 @@ namespace FTPDataTransfer
     class Program
     {
         public static IConfiguration configuration;
+        public static CustomCache customCache;
+        private const int CacheTimeMilliseconds = 1000;
 
-        static async Task Main(string[] args)
+        static void Main(string[] args)
         {
             configuration = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
@@ -19,6 +21,7 @@ namespace FTPDataTransfer
     .Build();
             try
             {
+                customCache = new CustomCache();
                 Run();
             }
             catch (Exception e)
@@ -41,8 +44,7 @@ namespace FTPDataTransfer
             FtpWebRequest request = (FtpWebRequest)WebRequest.Create($"ftp://{domain}:{port }/{filename}");
             request.Method = WebRequestMethods.Ftp.UploadFile;
 
-            // This example assumes the FTP site uses anonymous logon.
-            //string userName = "testingftp@sucomunicacion.com", password = "sucomunicacion2022";
+            // This example assumes the FTP site uses anonymous logon.            
             request.Credentials = new NetworkCredential(userName, password);
 
 
@@ -83,15 +85,11 @@ namespace FTPDataTransfer
                 Console.WriteLine($"Watching: {watcher.Path}");
 
                 // Watch for changes in LastAccess and LastWrite times, and
-                // the renaming of files or directories.
-                /*watcher.NotifyFilter = NotifyFilters.LastAccess
-                                     | NotifyFilters.LastWrite
-                                     | NotifyFilters.FileName
-                                     | NotifyFilters.DirectoryName;*/
+                // the renaming of files or directories.           
                 watcher.NotifyFilter = NotifyFilters.LastWrite;
 
                 // Only watch text files.
-                watcher.Filter = "*.xml"; // * to filter all formats
+                watcher.Filter = $"*.{configuration.GetValue<string>("extension")}"; // * to filter all formats
 
                 // Add event handlers.
                 watcher.Changed += OnChanged;
@@ -111,31 +109,16 @@ namespace FTPDataTransfer
         // Define the event handlers.
         private static void OnChanged(object source, FileSystemEventArgs e)
         {
-            // Specify what is done when a file is changed, created, or deleted.
-            Console.WriteLine($"File: {e.FullPath} {e.ChangeType}");
+            customCache._cacheItemPolicy.AbsoluteExpiration =
+ DateTimeOffset.Now.AddMilliseconds(CacheTimeMilliseconds);
 
-            if (WatcherChangeTypes.Created.Equals(e.ChangeType) || WatcherChangeTypes.Changed.Equals(e.ChangeType))
-            {
-                FileInfo file = new FileInfo(e.FullPath);
-                IConfigurationSection ftp = configuration.GetSection("ftp");
-
-                try
-                {
-                    //LoadFile(ftp.GetValue<string>("domain"), ftp.GetValue<string>("username"), ftp.GetValue<string>("password"), file, ftp.GetValue<string>("port"));
-                    Console.WriteLine($"<<Sucess>> File: {file.FullName} sent to upload!");
-                    Console.WriteLine("\n");
-                }
-                catch (WebException ex)
-                {
-                    Console.WriteLine(ex.Message);
-                    Console.WriteLine("\n");
-                    Console.WriteLine("<<Error>> File cannot be uploaded. Please, check configuration file and try again");
-                }
-            }
+            // Only add if it is not there already (swallow others)
+            customCache._memCache.AddOrGetExisting(e.Name, e, customCache._cacheItemPolicy);
         }
 
         private static void OnRenamed(object source, RenamedEventArgs e) =>
             // Specify what is done when a file is renamed.
             Console.WriteLine($"File: {e.OldFullPath} renamed to {e.FullPath}");
+
     }
 }
